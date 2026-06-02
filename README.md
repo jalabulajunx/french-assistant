@@ -6,6 +6,14 @@ It scans the active webpage, traverses same-origin `srcdoc` iframes, filters out
 
 ---
 
+## 📸 Screenshots
+
+| Word List | Detail View |
+|:---------:|:-----------:|
+| ![Word list with French vocabulary](Screenshot.png) | ![Detail view with pronunciation and accent notes](Screenshot2.png) |
+
+---
+
 ## ✨ Features
 
 -   **Deep Content Scanning**: Extracts French text recursively from nested same-origin `srcdoc` iframes while intelligently skipping English headings and instructions (`lang="en"`).
