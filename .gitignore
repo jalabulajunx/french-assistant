@@ -1,0 +1,21 @@
+# Environment & secrets
+.env
+.env.*
+*.key
+
+# Claude Code
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Node (if ever added)
+node_modules/

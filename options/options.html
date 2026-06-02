@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>French Assistant Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-area">
+        <img src="../icons/icon128.png" alt="French Assistant Logo" class="logo">
+        <h1>French Assistant Settings</h1>
+      </div>
+      <p class="subtitle">Configure your API credentials and synthesis options</p>
+    </header>
+
+    <main>
+      <!-- Section: API Credentials -->
+      <section class="card">
+        <h2>🔑 API Credentials</h2>
+        <p class="section-desc">Credentials are saved securely in your browser's local synchronized storage.</p>
+        
+        <div class="form-group">
+          <label for="gemini-key">Gemini API Key</label>
+          <div class="input-container">
+            <input type="password" id="gemini-key" placeholder="AIzaSy...">
+            <button class="btn-toggle-visibility" type="button" tabindex="-1">👁️</button>
+          </div>
+          <span class="help-text">Used for text extraction and translation analysis. Get a key from Google AI Studio.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="gemini-model-select">Gemini Model</label>
+          <div class="select-wrapper">
+            <select id="gemini-model-select">
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash (Default - Fast & Smart)</option>
+              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Ultra-fast & cost-efficient)</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro (Rich linguistic detail, slower)</option>
+              <option value="custom">-- Use Custom Model ID --</option>
+            </select>
+          </div>
+          <input type="text" id="gemini-model-custom" placeholder="Enter Gemini Model ID (e.g., gemini-1.5-flash)" class="hidden mt-2">
+        </div>
+
+        <div class="form-group">
+          <label for="elevenlabs-key">ElevenLabs API Key</label>
+          <div class="input-container">
+            <input type="password" id="elevenlabs-key" placeholder="xi-api-key...">
+            <button class="btn-toggle-visibility" type="button" tabindex="-1">👁️</button>
+          </div>
+          <span class="help-text">Used for high-quality audio pronunciation guide playback. Get a key from ElevenLabs.</span>
+        </div>
+      </section>
+
+      <!-- Section: Text-to-Speech Settings -->
+      <section class="card">
+        <h2>🔊 Voice Customization</h2>
+        <p class="section-desc">Select or input custom voice IDs from your ElevenLabs dashboard.</p>
+        
+        <div class="form-group">
+          <label for="elevenlabs-french-voice">French Voice (Target Language)</label>
+          <div class="select-wrapper">
+            <select id="elevenlabs-french-voice-select">
+              <option value="XB0fDUncoFtcPPmgj5LH">Charlotte (French - Sweet & Natural)</option>
+              <option value="EXAVITQu4vr4xnSDxMaL">Rachel (Multilingual - Crisp)</option>
+              <option value="CwhAS4zESvGZC5v9638g">Gigi (French - Professional)</option>
+              <option value="custom">-- Use Custom Voice ID --</option>
+            </select>
+          </div>
+          <input type="text" id="elevenlabs-french-voice-custom" placeholder="Enter ElevenLabs Voice ID" class="hidden mt-2">
+        </div>
+
+        <div class="form-group">
+          <label for="elevenlabs-english-voice">English Voice (Pronunciation Guide)</label>
+          <div class="select-wrapper">
+            <select id="elevenlabs-english-voice-select">
+              <option value="21m00Tcm4TlvDq8ikWAM">Rachel (English - Conversational)</option>
+              <option value="AZnzlk1XhkjUfBnSpctF">Domi (English - High Quality)</option>
+              <option value="custom">-- Use Custom Voice ID --</option>
+            </select>
+          </div>
+          <input type="text" id="elevenlabs-english-voice-custom" placeholder="Enter ElevenLabs Voice ID" class="hidden mt-2">
+        </div>
+      </section>
+
+      <!-- Section: Cache & Utilities -->
+      <section class="card">
+        <h2>🧹 Storage & Cache</h2>
+        <p class="section-desc">Manage locally cached pronunciation audio files.</p>
+        <div class="cache-status-container">
+          <div class="cache-info">
+            <span class="cache-label">Audio Cache:</span>
+            <span id="cache-size">Loading status...</span>
+          </div>
+          <button id="btn-clear-cache" class="btn btn-secondary">Clear Cached Audio</button>
+        </div>
+      </section>
+
+      <!-- Save & Actions -->
+      <div class="actions">
+        <div class="status-msg" id="status-message"></div>
+        <button id="btn-save" class="btn btn-primary">Save Settings</button>
+      </div>
+    </main>
+    
+    <footer>
+      <p>French Assistant for McGraw Hill "Communication en direct" Reader.</p>
+    </footer>
+  </div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>French Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Noto+Sans+Tamil:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="flag-icon">🇫🇷</span>
+        <h1 class="title">French Assistant</h1>
+      </div>
+      <button id="btn-settings" class="icon-btn" title="Open Settings">⚙️</button>
+    </header>
+
+    <!-- Navigation/Control Actions -->
+    <section class="controls">
+      <button id="btn-analyze" class="btn btn-primary" title="Scan page for French text">
+        <span class="icon">🔍</span> Analyze Page
+      </button>
+      <button id="btn-lookup" class="btn btn-secondary" title="Look up highlighted text">
+        <span class="icon">👆</span> Lookup Selected
+      </button>
+    </section>
+
+    <!-- Main Content Area -->
+    <main class="content-area">
+      <!-- State 1: Empty / Prompt state -->
+      <div id="state-empty" class="state-container">
+        <div class="empty-graphic">📖</div>
+        <h3>No vocabulary loaded</h3>
+        <p>Navigate to any French textbook or webpage and click <strong>Analyze Page</strong>, or select any French text on the page and click <strong>Lookup Selected</strong>.</p>
+        <div class="empty-help">
+          <p class="tip-label">💡 Tip</p>
+          <p>Make sure you have added your Gemini API key in the settings first.</p>
+        </div>
+      </div>
+
+      <!-- State 2: Loading State -->
+      <div id="state-loading" class="state-container hidden">
+        <div class="spinner-container">
+          <div class="spinner"></div>
+          <div class="spinner-accent"></div>
+        </div>
+        <h3 id="loading-title">Analyzing page content...</h3>
+        <p>Consulting Gemini to extract and analyze French vocabulary.</p>
+        <div class="skeleton-list">
+          <div class="skeleton-item"></div>
+          <div class="skeleton-item"></div>
+          <div class="skeleton-item"></div>
+        </div>
+      </div>
+
+      <!-- State 3: Word List -->
+      <div id="state-list" class="hidden">
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" placeholder="Search words..." autocomplete="off" />
+        </div>
+        <div class="list-header">
+          <span id="word-count">0 words found</span>
+          <button id="btn-clear-list" class="text-btn">Clear list</button>
+        </div>
+        <div id="words-container" class="scroll-container">
+          <!-- Word cards will be generated here -->
+        </div>
+      </div>
+
+      <!-- State 4: Detail View Drawer -->
+      <div id="detail-panel" class="detail-panel">
+        <div class="detail-header">
+          <button id="btn-back" class="back-btn">← Back to List</button>
+        </div>
+        <div class="detail-content scroll-container">
+          <div class="detail-hero">
+            <h2 id="detail-french-word">bonjour</h2>
+            <div class="audio-controls">
+              <button id="btn-play-french" class="audio-play-btn" title="Pronounce French">
+                <span class="play-icon">🔊</span> French Voice
+              </button>
+            </div>
+          </div>
+
+          <div class="detail-section translation-section">
+            <span class="section-label">English Translation</span>
+            <p id="detail-english-meaning" class="section-val-main">hello / good morning</p>
+          </div>
+
+          <div class="detail-section">
+            <span class="section-label">Pronunciation Guides</span>
+            <div class="pronunciation-card">
+              <div class="pron-row">
+                <span class="pron-lang">English Phonetics</span>
+                <span id="detail-english-pron" class="pron-text">bohn-ZHOOR</span>
+              </div>
+              <div class="pron-row">
+                <span class="pron-lang">Tamil Phonetics</span>
+                <span id="detail-tamil-pron" class="pron-text">போன்ழூர் (pōṉzhūr)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="detail-section accent-section">
+            <span class="section-label">Accent Marks &amp; Diacritics</span>
+            <p id="detail-accent-notes" class="accent-text">No accent marks.</p>
+          </div>
+
+          <div class="detail-section">
+            <span class="section-label">Contextual Usage</span>
+            <p id="detail-contextual-meaning" class="usage-text">Used as a primary greeting during daylight hours.</p>
+          </div>
+
+          <div class="detail-grid">
+            <div class="detail-grid-item">
+              <span class="section-label">Formality</span>
+              <span id="detail-formality" class="badge badge-neutral">neutral</span>
+            </div>
+            <div class="detail-grid-item">
+              <span class="section-label">Grammar Notes</span>
+              <p id="detail-grammar-notes" class="grammar-text">Interjection, common greeting.</p>
+            </div>
+          </div>
+
+          <div class="detail-section">
+            <span class="section-label">Example Sentence</span>
+            <div class="example-box">
+              <div class="example-top">
+                <p id="detail-example-fr" class="example-fr">Bonjour, comment ça va?</p>
+                <button id="btn-play-example" class="btn-small-audio" title="Hear this sentence in French">🔊 Play</button>
+              </div>
+              <p id="detail-example-en" class="example-en">(Hello, how is it going?)</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

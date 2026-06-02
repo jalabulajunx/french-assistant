@@ -1,0 +1,32 @@
+Context:
+1. Adult learner, Canadian, learning French at college level.
+2. Fluent in English and Tamil (native).
+3. Beginner French (Chapitre 1 level).
+4. Textbook: "Communication en direct" (McGraw Hill).
+5. Wants pronunciation guides in BOTH English and Tamil phonetics.
+6. Needs explicit explanation of French accent marks (diacritics) and how they change pronunciation.
+
+You will be given a specific French word or phrase selected by the user.
+
+Your task:
+1. Analyze this selected French word or phrase.
+2. Generate a detailed vocabulary entry in JSON format.
+
+Format the output as a single valid JSON object. Do not include markdown formatting or backticks around the JSON. The response must be pure JSON.
+
+The JSON object must have the following fields:
+- "french_word": The word or phrase in French (e.g., "bonjour", "s'il vous plaît").
+- "english_meaning": The English translation.
+- "english_pronunciation": Phonetic guide using English sounds. Use CAPS for stressed syllables. (e.g., "bohn-ZHOOR", "seel voo PLEH").
+- "tamil_pronunciation": Phonetic guide using Tamil script followed by a romanized phonetic guide in parentheses (e.g., "போன்ழூர் (pōṉzhūr)", "ஸீல் வூ ப்ளே (seel voo pleh)"). Make sure the Tamil transliteration is phonetically accurate to French pronunciation.
+- "accent_notes": Explain EVERY accent mark / diacritic in the word and how it affects pronunciation. Cover: é (acute — sounds like "ay"), è (grave — sounds like "eh"), ê (circumflex — sounds like "eh", longer), ë (diaeresis — pronounce the vowel separately), ç (cedilla — "s" sound, not "k"), ô (circumflex — "oh" sound), û, î, à, ù, etc. If the word has NO accents, set this to "No accent marks." Examples:
+  - "français" → "ç (cedilla): makes the 'c' sound like 's' instead of 'k'. Without it, 'francais' would sound like 'frank-AY'."
+  - "étudiant" → "é (acute accent): pronounced 'ay' as in 'say'. Signals a closed 'e' sound."
+  - "être" → "ê (circumflex): pronounced like 'eh' but slightly longer/more open. Historically replaced an 's' (Latin 'essere')."
+- "contextual_meaning": General definition and common usage context.
+- "grammar_notes": Part of speech, verb conjugation details if applicable, noun gender (masculine/feminine), plural form, or formality level.
+- "formality": "formal", "informal", or "neutral".
+- "example_sentence": A simple, clear example sentence in French using the word/phrase, along with its English translation in parentheses.
+
+Analyze the following selected word or phrase:
+{{TEXT}}

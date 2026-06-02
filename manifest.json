@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "French Assistant",
+  "version": "1.0",
+  "description": "Extracts French words/phrases, provides pronunciation guides (English & Tamil), and synthesizes audio using ElevenLabs.",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://api.elevenlabs.io/*",
+    "https://generativelanguage.googleapis.com/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "scripts/service_worker.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+  "options_page": "options/options.html",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["scripts/content_script.js"],
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_title": "French Assistant"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
