@@ -8,9 +8,15 @@ It scans the active webpage, traverses same-origin `srcdoc` iframes, filters out
 
 ## 📸 Screenshots
 
-| Word List | Detail View |
-|:---------:|:-----------:|
-| ![Word list with French vocabulary](Screenshot.png) | ![Detail view with pronunciation and accent notes](Screenshot2.png) |
+### Word List View
+Open any page with French content, click **Analyze Page**, and the side panel extracts vocabulary with translations. Each card shows the French word and its English meaning, with a quick-play 🔊 button for instant pronunciation.
+
+![Word list showing extracted French vocabulary from a textbook page](Screenshot.png)
+
+### Detail View
+Click any word to expand its full breakdown — pronunciation guides in both English and Tamil phonetics, accent mark explanations (e.g., what the circumflex in *hôtel* does to the vowel), contextual usage, grammar notes, formality level, and an example sentence with a **Play** button to hear it spoken in French.
+
+![Detail view showing pronunciation guides, accent notes, and example sentence](Screenshot2.png)
 
 ---
 
