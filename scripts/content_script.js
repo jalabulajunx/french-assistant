@@ -267,8 +267,8 @@ async function autoScrollAndCapture() {
 
       // Scroll down
       const prevPos = scrollBody.scrollTop;
-      scrollTarget.scrollBy({ top: stepSize, behavior: 'smooth' });
-      await sleep(600); // wait for smooth scroll + content render
+      scrollTarget.scrollBy({ top: stepSize, behavior: 'instant' });
+      await sleep(400); // wait for content render after instant scroll
 
       // Wait a bit more for lazy/virtualized content to render
       await sleep(300);

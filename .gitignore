@@ -20,3 +20,4 @@ Thumbs.db
 # Node (if ever added)
 node_modules/
 OAuth_Secret.json
+*.har

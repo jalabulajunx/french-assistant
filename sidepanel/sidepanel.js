@@ -186,9 +186,9 @@ function handleSelectionLookup() {
 
     if (response && response.success) {
       const newWord = response.data;
-      mergeNewWords([newWord]);
+      mergeNewWords([newWord], true);  // prepend so lookup appears at top
       showState('list');
-      
+
       // Auto open detail view for the looked-up word
       openDetailView(newWord);
     } else {
@@ -198,22 +198,27 @@ function handleSelectionLookup() {
   });
 }
 
-// Merge new words into existing list, avoiding duplicate keys
-function mergeNewWords(newWordsList) {
+// Merge new words into existing list, avoiding duplicate keys.
+// prepend=true puts new words at the top (for single lookups),
+// prepend=false appends in order (for full page analysis).
+function mergeNewWords(newWordsList, prepend = false) {
   if (!Array.isArray(newWordsList)) return;
-  
+
   newWordsList.forEach(newEntry => {
     // Check for duplicates (case insensitive)
     const idx = currentWords.findIndex(
       item => item.french_word.toLowerCase() === newEntry.french_word.toLowerCase()
     );
-    
+
     if (idx !== -1) {
       // Replace existing entry with updated/better details
       currentWords[idx] = newEntry;
-    } else {
-      // Add to front of the list
+    } else if (prepend) {
+      // Add to front of the list (for lookups)
       currentWords.unshift(newEntry);
+    } else {
+      // Append to end, preserving page order (for full analysis)
+      currentWords.push(newEntry);
     }
   });
 

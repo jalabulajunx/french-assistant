@@ -61,6 +61,25 @@ export async function analyzeWithVisionChunked(screenshots, apiKey, modelName = 
     throw new Error('Gemini API key is not configured. Please add it in the settings.');
   }
 
+  // Deduplicate identical screenshots (same scroll position captured multiple times)
+  const seenHashes = new Set();
+  const uniqueScreenshots = [];
+  for (const dataUrl of screenshots) {
+    const base64 = dataUrl.split(',')[1] || dataUrl;
+    if (!seenHashes.has(base64)) {
+      seenHashes.add(base64);
+      uniqueScreenshots.push(dataUrl);
+    }
+  }
+  if (uniqueScreenshots.length < screenshots.length) {
+    console.log(`Vision: deduplicated ${screenshots.length} screenshots → ${uniqueScreenshots.length} unique`);
+  }
+  screenshots = uniqueScreenshots;
+
+  if (screenshots.length === 0) {
+    throw new Error('No unique screenshots to analyze (all were duplicates).');
+  }
+
   // For vision, use flash (not flash-lite) for better image understanding
   const visionModel = modelName.includes('lite') ? modelName.replace('-lite', '') : modelName;
 

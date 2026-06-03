@@ -25,6 +25,15 @@ async function captureScreenshot() {
       format: 'jpeg',
       quality: 60  // lower quality = smaller payload, still readable
     });
+    // Skip if this screenshot is identical to the last one (same scroll position)
+    if (capturedScreenshots.length > 0) {
+      const lastBase64 = capturedScreenshots[capturedScreenshots.length - 1].split(',')[1];
+      const newBase64 = dataUrl.split(',')[1];
+      if (lastBase64 === newBase64) {
+        console.log('Vision: skipped duplicate screenshot (same as previous)');
+        return;
+      }
+    }
     if (capturedScreenshots.length >= MAX_SCREENSHOTS) {
       // Drop oldest to make room
       capturedScreenshots.shift();
