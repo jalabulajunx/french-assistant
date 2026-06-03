@@ -16,6 +16,7 @@ const visionStatus = document.getElementById('vision-status');
 const btnAnalyze = document.getElementById('btn-analyze');
 const btnLookup = document.getElementById('btn-lookup');
 const btnSettings = document.getElementById('btn-settings');
+const btnSync = document.getElementById('btn-sync');
 
 // Detail Panel Elements
 const detailPanel = document.getElementById('detail-panel');
@@ -52,6 +53,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'analysis_progress') {
     loadingTitle.textContent = message.detail || 'Analyzing...';
   }
+  if (message.action === 'sync_progress') {
+    if (btnSync) btnSync.title = message.detail || 'Syncing...';
+  }
 });
 
 // Initialize Side Panel
@@ -78,6 +82,9 @@ function setupEventListeners() {
   btnAnalyze.addEventListener('click', handlePageAnalysis);
   btnLookup.addEventListener('click', handleSelectionLookup);
   clearListBtn.addEventListener('click', handleClearList);
+
+  // Drive sync
+  btnSync.addEventListener('click', handleDriveSync);
 
   // Vision mode toggle
   toggleVision.addEventListener('change', () => {
@@ -210,9 +217,10 @@ function mergeNewWords(newWordsList) {
     }
   });
 
-  // Save to local storage
+  // Save to local storage, then push to Drive in background
   chrome.storage.local.set({ analyzedWords: currentWords }, () => {
     renderWordList();
+    backgroundDrivePush();
   });
 }
 
@@ -436,6 +444,42 @@ function startCaptureStatusPolling() {
 async function getActiveTabFromSidePanel() {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   return tabs[0] || null;
+}
+
+// Handle Drive sync
+function handleDriveSync() {
+  btnSync.disabled = true;
+  btnSync.textContent = '🔄';
+  btnSync.title = 'Syncing...';
+
+  chrome.runtime.sendMessage({ action: 'drive_sync' }, (response) => {
+    btnSync.disabled = false;
+    btnSync.textContent = '☁️';
+
+    if (chrome.runtime.lastError) {
+      btnSync.title = 'Sync failed — check settings';
+      alert('Sync failed: ' + chrome.runtime.lastError.message);
+      return;
+    }
+
+    if (response && response.success) {
+      const s = response.stats;
+      btnSync.title = `Last sync: ${s.wordsPushed} words, ↑${s.audioPushed} ↓${s.audioPulled} audio`;
+      // Reload words in case remote had new entries
+      loadSavedWords();
+    } else {
+      btnSync.title = 'Sync failed — ' + (response?.error || 'unknown error');
+      alert('Sync failed: ' + (response?.error || 'Please configure Drive in Settings.'));
+    }
+  });
+}
+
+// Background push vocabulary to Drive after changes (fire-and-forget)
+function backgroundDrivePush() {
+  chrome.runtime.sendMessage(
+    { action: 'drive_push_vocabulary', words: currentWords },
+    () => { /* ignore errors — non-critical */ }
+  );
 }
 
 // Simple HTML escaping helper

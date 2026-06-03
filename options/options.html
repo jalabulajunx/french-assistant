@@ -88,6 +88,38 @@
         </div>
       </section>
 
+      <!-- Section: Google Drive Sync -->
+      <section class="card">
+        <h2>☁️ Google Drive Sync</h2>
+        <p class="section-desc">Sync your vocabulary and audio cache to Google Drive for backup and cross-device access.</p>
+
+        <div class="form-group">
+          <label for="drive-client-id">Google OAuth Client ID</label>
+          <div class="input-container">
+            <input type="text" id="drive-client-id" placeholder="123456789.apps.googleusercontent.com">
+          </div>
+          <span class="help-text">
+            Create a "Web application" OAuth Client ID in
+            <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a>.
+            Add this redirect URI: <code id="drive-redirect-uri">loading...</code>
+          </span>
+        </div>
+
+        <div class="form-group">
+          <label for="drive-folder-id">Google Drive Folder ID</label>
+          <div class="input-container">
+            <input type="text" id="drive-folder-id" placeholder="1OrA9huCHEbGcZ7YoLe9LMs9D-d94Lv0G">
+          </div>
+          <span class="help-text">The folder ID from your Google Drive shared folder URL (the part after <code>/folders/</code>).</span>
+        </div>
+
+        <div class="drive-actions">
+          <button id="btn-drive-auth" class="btn btn-secondary">🔑 Authenticate with Google</button>
+          <button id="btn-drive-sync" class="btn btn-secondary">🔄 Sync Now</button>
+        </div>
+        <div id="drive-status" class="drive-status"></div>
+      </section>
+
       <!-- Section: Cache & Utilities -->
       <section class="card">
         <h2>🧹 Storage & Cache</h2>
@@ -109,7 +141,7 @@
     </main>
     
     <footer>
-      <p>French Assistant for McGraw Hill "Communication en direct" Reader.</p>
+      <p>French Assistant — Learn French with pronunciation guides and audio.</p>
     </footer>
   </div>
   <script type="module" src="options.js"></script>

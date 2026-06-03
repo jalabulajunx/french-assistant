@@ -1,5 +1,6 @@
 // Options Script — Manage settings & credentials
 import { clearCache } from '../lib/audio_cache.js';
+import { authenticate, getRedirectUrl } from '../lib/drive_sync.js';
 
 // DOM Elements
 const geminiKeyInput = document.getElementById('gemini-key');
@@ -18,6 +19,14 @@ const cacheSizeSpan = document.getElementById('cache-size');
 const clearCacheBtn = document.getElementById('btn-clear-cache');
 const saveBtn = document.getElementById('btn-save');
 const statusMessage = document.getElementById('status-message');
+
+// Drive sync elements
+const driveClientIdInput = document.getElementById('drive-client-id');
+const driveFolderIdInput = document.getElementById('drive-folder-id');
+const driveRedirectUri = document.getElementById('drive-redirect-uri');
+const btnDriveAuth = document.getElementById('btn-drive-auth');
+const btnDriveSync = document.getElementById('btn-drive-sync');
+const driveStatus = document.getElementById('drive-status');
 
 // Toggle Password Visibility
 document.querySelectorAll('.btn-toggle-visibility').forEach(button => {
@@ -72,14 +81,36 @@ async function loadSettings() {
     'geminiModel',
     'elevenlabsApiKey',
     'elevenlabsFrenchVoiceId',
-    'elevenlabsEnglishVoiceId'
+    'elevenlabsEnglishVoiceId',
+    'driveClientId',
+    'driveFolderId'
   ], (items) => {
     if (items.geminiApiKey) geminiKeyInput.value = items.geminiApiKey;
     if (items.elevenlabsApiKey) elevenlabsKeyInput.value = items.elevenlabsApiKey;
+    if (items.driveClientId) driveClientIdInput.value = items.driveClientId;
+    if (items.driveFolderId) driveFolderIdInput.value = items.driveFolderId;
 
     setSelectValue(geminiModelSelect, geminiModelCustom, items.geminiModel || 'gemini-2.5-flash');
     setSelectValue(frenchVoiceSelect, frenchVoiceCustom, items.elevenlabsFrenchVoiceId);
     setSelectValue(englishVoiceSelect, englishVoiceCustom, items.elevenlabsEnglishVoiceId);
+  });
+
+  // Show redirect URI for OAuth setup
+  try {
+    driveRedirectUri.textContent = getRedirectUrl();
+  } catch (e) {
+    driveRedirectUri.textContent = '(will be shown after extension loads)';
+  }
+
+  // Check Drive auth status
+  chrome.storage.local.get(['driveTokenExpiresAt'], (items) => {
+    if (items.driveTokenExpiresAt && items.driveTokenExpiresAt > Date.now()) {
+      driveStatus.textContent = '✅ Authenticated';
+      driveStatus.className = 'drive-status status-success';
+    } else if (items.driveTokenExpiresAt) {
+      driveStatus.textContent = '⚠️ Token expired — click Authenticate';
+      driveStatus.className = 'drive-status status-error';
+    }
   });
 
   updateCacheSizeDisplay();
@@ -137,6 +168,16 @@ saveBtn.addEventListener('click', () => {
     elevenlabsEnglishVoiceId = englishVoiceCustom.value.trim();
   }
 
+  // Drive settings
+  const driveClientId = driveClientIdInput.value.trim();
+  let driveFolderId = driveFolderIdInput.value.trim();
+  // Extract folder ID from a full Drive URL if pasted
+  const folderMatch = driveFolderId.match(/folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch) {
+    driveFolderId = folderMatch[1];
+    driveFolderIdInput.value = driveFolderId;
+  }
+
   // Validate basic fields
   if (!geminiApiKey) {
     showStatus('Please enter a Gemini API Key', 'error');
@@ -148,7 +189,9 @@ saveBtn.addEventListener('click', () => {
     geminiModel,
     elevenlabsApiKey,
     elevenlabsFrenchVoiceId,
-    elevenlabsEnglishVoiceId
+    elevenlabsEnglishVoiceId,
+    driveClientId,
+    driveFolderId
   }, () => {
     showStatus('Settings saved successfully!', 'success');
     loadSettings(); // Reload to refresh custom inputs layout
@@ -185,6 +228,80 @@ function showStatus(text, type) {
     statusMessage.className = 'status-msg';
   }, 4000);
 }
+
+// Drive: Authenticate
+btnDriveAuth.addEventListener('click', async () => {
+  const clientId = driveClientIdInput.value.trim();
+  if (!clientId) {
+    showStatus('Please enter a Google OAuth Client ID first', 'error');
+    return;
+  }
+
+  // Save the client ID first
+  await chrome.storage.sync.set({ driveClientId: clientId });
+
+  try {
+    driveStatus.textContent = '🔄 Authenticating...';
+    driveStatus.className = 'drive-status';
+    await authenticate(clientId, true);
+    driveStatus.textContent = '✅ Authenticated successfully!';
+    driveStatus.className = 'drive-status status-success';
+    showStatus('Google Drive authenticated!', 'success');
+  } catch (err) {
+    console.error('Drive auth error:', err);
+    driveStatus.textContent = '❌ Authentication failed';
+    driveStatus.className = 'drive-status status-error';
+    showStatus('Authentication failed: ' + err.message, 'error');
+  }
+});
+
+// Drive: Sync Now
+btnDriveSync.addEventListener('click', async () => {
+  const clientId = driveClientIdInput.value.trim();
+  const folderId = driveFolderIdInput.value.trim();
+
+  if (!clientId || !folderId) {
+    showStatus('Please configure Drive Client ID and Folder ID first', 'error');
+    return;
+  }
+
+  try {
+    driveStatus.textContent = '🔄 Syncing...';
+    driveStatus.className = 'drive-status';
+    btnDriveSync.disabled = true;
+
+    // Listen for progress updates
+    const progressListener = (message) => {
+      if (message.action === 'sync_progress') {
+        driveStatus.textContent = `🔄 ${message.detail}`;
+      }
+    };
+    chrome.runtime.onMessage.addListener(progressListener);
+
+    const response = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: 'drive_sync' }, resolve);
+    });
+
+    chrome.runtime.onMessage.removeListener(progressListener);
+    btnDriveSync.disabled = false;
+
+    if (response && response.success) {
+      const s = response.stats;
+      driveStatus.textContent = `✅ Synced! Words: ${s.wordsPushed} total, Audio: ↑${s.audioPushed} ↓${s.audioPulled}`;
+      driveStatus.className = 'drive-status status-success';
+      showStatus('Drive sync complete!', 'success');
+    } else {
+      driveStatus.textContent = '❌ Sync failed';
+      driveStatus.className = 'drive-status status-error';
+      showStatus('Sync failed: ' + (response?.error || 'Unknown error'), 'error');
+    }
+  } catch (err) {
+    btnDriveSync.disabled = false;
+    driveStatus.textContent = '❌ Sync failed';
+    driveStatus.className = 'drive-status status-error';
+    showStatus('Sync failed: ' + err.message, 'error');
+  }
+});
 
 // Run on startup
 document.addEventListener('DOMContentLoaded', loadSettings);

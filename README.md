@@ -38,6 +38,7 @@ Click any word to expand its full breakdown — pronunciation guides in both Eng
 -   **In-Page Highlighting**: Clicking a word scrolls the textbook page to its occurrence and highlights it.
 -   **Search**: Filter your vocabulary list by French word or English meaning.
 -   **Offline Audio Caching**: Caches synthesized MP3 clips in IndexedDB to minimize API usage and ensure instantaneous playback on repeat clicks. Includes stale-handle recovery for service worker lifecycle resilience.
+-   **Google Drive Sync**: Two-way sync of vocabulary and audio cache to a user-specified Google Drive folder. Vocabulary pushes automatically after each analysis; audio files sync incrementally. Works across devices with the same Google account.
 -   **Persistent Session Memory**: Saves currently analyzed words in local browser storage (`chrome.storage.local`) so your session isn't lost when closing the side panel.
 -   **Text Selection Lookup**: Highlight any word or sentence on the page and click "Lookup Selected" to instantly translate and slide open its detail card.
 
@@ -95,6 +96,17 @@ You will need your own API keys. Configure them on the settings page:
     -   *French Voice*: Select **Charlotte** (recommended for natural French female narration) or paste a custom Voice ID.
     -   *English Voice*: Select **Rachel** (recommended for conversational English guides) or paste a custom Voice ID.
 -   Click **Save Settings**.
+
+### 3. Configure Google Drive Sync (Optional)
+To sync your vocabulary and audio across devices:
+1.  Go to the [Google Cloud Console — Credentials](https://console.cloud.google.com/apis/credentials).
+2.  Create an **OAuth 2.0 Client ID** of type **Web application**.
+3.  Add the redirect URI shown on the extension's settings page (looks like `https://<extension-id>.chromiumapp.org/`) to the **Authorized redirect URIs**.
+4.  Enable the **Google Drive API** in your Google Cloud project.
+5.  Copy the Client ID into the extension's settings.
+6.  Enter the Google Drive Folder ID (from the folder URL, the part after `/folders/`). You can also paste the full folder URL — the extension extracts the ID automatically.
+7.  Click **Authenticate with Google** and grant access.
+8.  Click **Sync Now** to perform the initial sync, or use the ☁️ button in the side panel.
 
 ---
 

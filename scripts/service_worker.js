@@ -1,6 +1,7 @@
 // Service Worker (Background Script) for French Assistant
 
-import { getAudio, saveAudio } from '../lib/audio_cache.js';
+import { getAudio, saveAudio, getAllKeys, getAudioByKey, saveAudioByKey } from '../lib/audio_cache.js';
+import { getValidToken, fullSync, pushVocabulary, pushAudioFile } from '../lib/drive_sync.js';
 import { analyzeText, analyzeTextChunked, analyzeWithVisionChunked, analyzePdfChunked } from './gemini_client.js';
 import { synthesizeSpeech } from './elevenlabs_client.js';
 
@@ -116,6 +117,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Forward progress to all extension views (sidepanel)
     chrome.runtime.sendMessage(message).catch(() => {});
     return false;
+  }
+
+  if (message.action === 'drive_sync') {
+    handleDriveSync(sendResponse);
+    return true;
+  }
+
+  if (message.action === 'drive_push_vocabulary') {
+    handleDrivePushVocabulary(message.words, sendResponse);
+    return true;
   }
 });
 
@@ -407,8 +418,10 @@ async function handleGetAudio(text, voiceType, sendResponse) {
     console.log(`Audio Cache Miss. Fetching from ElevenLabs for "${text}"...`);
     const blob = await synthesizeSpeech(text, voiceId, apiKey);
 
-    // Save to cache asynchronously
-    saveAudio(text, voiceId, blob).catch(err => {
+    // Save to cache asynchronously, then push to Drive if configured
+    saveAudio(text, voiceId, blob).then(() => {
+      backgroundDrivePushAudio(text, voiceId, blob);
+    }).catch(err => {
       console.error('Failed to cache audio:', err);
     });
 
@@ -418,4 +431,140 @@ async function handleGetAudio(text, voiceType, sendResponse) {
     console.error('Speech synthesis error:', error);
     sendResponse({ success: false, error: error.message });
   }
+}
+
+// ─── Google Drive Sync ───
+
+/**
+ * Get Drive sync settings.
+ * @returns {Promise<{clientId: string, folderId: string}|null>}
+ */
+async function getDriveSyncSettings() {
+  const settings = await chrome.storage.sync.get(['driveClientId', 'driveFolderId']);
+  if (settings.driveClientId && settings.driveFolderId) {
+    return { clientId: settings.driveClientId, folderId: settings.driveFolderId };
+  }
+  return null;
+}
+
+/**
+ * Full two-way sync triggered by user or on startup.
+ */
+async function handleDriveSync(sendResponse) {
+  try {
+    const driveSettings = await getDriveSyncSettings();
+    if (!driveSettings) {
+      throw new Error('Google Drive sync is not configured. Set it up in Settings.');
+    }
+
+    const token = await getValidToken(driveSettings.clientId);
+    if (!token) {
+      throw new Error('Google Drive authentication expired. Please re-authenticate in Settings.');
+    }
+
+    function broadcastProgress(detail) {
+      chrome.runtime.sendMessage({ action: 'sync_progress', detail }).catch(() => {});
+    }
+
+    const stats = await fullSync(driveSettings.folderId, token, {
+      getLocalWords: async () => {
+        const result = await chrome.storage.local.get(['analyzedWords']);
+        return result.analyzedWords || [];
+      },
+      setLocalWords: async (words) => {
+        await chrome.storage.local.set({ analyzedWords: words });
+      },
+      getLocalAudio: async (key) => {
+        return await getAudioByKey(key);
+      },
+      saveLocalAudio: async (key, blob) => {
+        await saveAudioByKey(key, blob);
+      },
+      getAllLocalAudioKeys: async () => {
+        return await getAllKeys();
+      },
+      onProgress: broadcastProgress
+    });
+
+    sendResponse({ success: true, stats });
+  } catch (error) {
+    console.error('Drive sync error:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+/**
+ * Push vocabulary to Drive after analysis (called from sidepanel).
+ */
+async function handleDrivePushVocabulary(words, sendResponse) {
+  try {
+    const driveSettings = await getDriveSyncSettings();
+    if (!driveSettings) {
+      sendResponse({ success: false, error: 'Drive not configured' });
+      return;
+    }
+
+    const token = await getValidToken(driveSettings.clientId);
+    if (!token) {
+      sendResponse({ success: false, error: 'Drive auth expired' });
+      return;
+    }
+
+    await pushVocabulary(words, driveSettings.folderId, token);
+    sendResponse({ success: true });
+  } catch (error) {
+    console.error('Drive push vocabulary error:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+/**
+ * Background push of a single audio file to Drive (fire-and-forget).
+ */
+async function backgroundDrivePushAudio(text, voiceId, blob) {
+  try {
+    const driveSettings = await getDriveSyncSettings();
+    if (!driveSettings) return;
+
+    const token = await getValidToken(driveSettings.clientId);
+    if (!token) return;
+
+    const audioFolderId = await findOrCreateAudioFolder(driveSettings.folderId, token);
+    const key = `${text.trim().toLowerCase()}_${voiceId}`;
+    await pushAudioFile(key, blob, audioFolderId, token);
+    console.log(`Drive: pushed audio for "${text}"`);
+  } catch (e) {
+    // Non-critical — just log it
+    console.warn('Drive: background audio push failed:', e.message);
+  }
+}
+
+/**
+ * Find or create the audio subfolder in the user's Drive sync folder.
+ */
+async function findOrCreateAudioFolder(parentFolderId, token) {
+  const DRIVE_API = 'https://www.googleapis.com/drive/v3';
+  const AUDIO_FOLDER_NAME = 'french-assistant-audio';
+
+  const query = `name='${AUDIO_FOLDER_NAME}' and '${parentFolderId}' in parents and trashed=false and mimeType='application/vnd.google-apps.folder'`;
+  const response = await fetch(`${DRIVE_API}/files?q=${encodeURIComponent(query)}&fields=files(id,name)&spaces=drive`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const data = await response.json();
+  if (data.files && data.files.length > 0) return data.files[0].id;
+
+  const createResponse = await fetch(`${DRIVE_API}/files`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: AUDIO_FOLDER_NAME,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentFolderId]
+    })
+  });
+  const created = await createResponse.json();
+  return created.id;
 }
