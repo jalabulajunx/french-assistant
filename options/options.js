@@ -237,8 +237,11 @@ btnDriveAuth.addEventListener('click', async () => {
     return;
   }
 
-  // Save the client ID first
-  await chrome.storage.sync.set({ driveClientId: clientId });
+  // Save both Drive settings before authenticating
+  let folderId = driveFolderIdInput.value.trim();
+  const folderMatch2 = folderId.match(/folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch2) folderId = folderMatch2[1];
+  await chrome.storage.sync.set({ driveClientId: clientId, driveFolderId: folderId });
 
   try {
     driveStatus.textContent = '🔄 Authenticating...';
@@ -258,12 +261,22 @@ btnDriveAuth.addEventListener('click', async () => {
 // Drive: Sync Now
 btnDriveSync.addEventListener('click', async () => {
   const clientId = driveClientIdInput.value.trim();
-  const folderId = driveFolderIdInput.value.trim();
+  let folderId = driveFolderIdInput.value.trim();
 
   if (!clientId || !folderId) {
     showStatus('Please configure Drive Client ID and Folder ID first', 'error');
     return;
   }
+
+  // Extract folder ID from a full Drive URL if pasted
+  const folderMatch3 = folderId.match(/folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch3) {
+    folderId = folderMatch3[1];
+    driveFolderIdInput.value = folderId;
+  }
+
+  // Persist settings before syncing so the service worker can find them
+  await chrome.storage.sync.set({ driveClientId: clientId, driveFolderId: folderId });
 
   try {
     driveStatus.textContent = '🔄 Syncing...';
