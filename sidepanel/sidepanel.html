@@ -29,6 +29,14 @@
         <span class="icon">👆</span> Lookup Selected
       </button>
     </section>
+    <section class="vision-bar">
+      <label class="vision-toggle" title="When ON, captures screenshots as you scroll and uses Gemini Vision to read text inside images">
+        <input type="checkbox" id="toggle-vision" />
+        <span class="toggle-slider"></span>
+        <span class="toggle-label">👁️ Vision Mode</span>
+      </label>
+      <span id="vision-status" class="vision-status"></span>
+    </section>
 
     <!-- Main Content Area -->
     <main class="content-area">
@@ -39,8 +47,9 @@
         <p>Navigate to any French textbook or webpage and click <strong>Analyze Page</strong>, or select any French text on the page and click <strong>Lookup Selected</strong>.</p>
         <div class="empty-help">
           <p class="tip-label">💡 Tip</p>
-          <p>Make sure you have added your Gemini API key in the settings first.</p>
+          <p>Click <strong>Analyze Page</strong> — the extension will auto-scroll the page, capture all content, then analyze it with Gemini.</p>
         </div>
+        <div id="capture-status" class="capture-status"></div>
       </div>
 
       <!-- State 2: Loading State -->

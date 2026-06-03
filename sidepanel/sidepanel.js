@@ -11,6 +11,8 @@ const wordCountSpan = document.getElementById('word-count');
 const clearListBtn = document.getElementById('btn-clear-list');
 
 const searchInput = document.getElementById('search-input');
+const toggleVision = document.getElementById('toggle-vision');
+const visionStatus = document.getElementById('vision-status');
 const btnAnalyze = document.getElementById('btn-analyze');
 const btnLookup = document.getElementById('btn-lookup');
 const btnSettings = document.getElementById('btn-settings');
@@ -38,10 +40,25 @@ let selectedWord = null;
 let currentPlayingAudio = null;
 let currentPlayingBtn = null;
 
+// Capture status element
+const captureStatus = document.getElementById('capture-status');
+
+// Listen for progress updates from service worker
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'auto_scroll_progress') {
+    const pct = Math.min(100, Math.round((message.position / message.totalHeight) * 100));
+    loadingTitle.textContent = `Scrolling page... ${pct}% (${message.paragraphs} blocks captured)`;
+  }
+  if (message.action === 'analysis_progress') {
+    loadingTitle.textContent = message.detail || 'Analyzing...';
+  }
+});
+
 // Initialize Side Panel
 document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   loadSavedWords();
+  startCaptureStatusPolling();
 });
 
 // Event Listeners setup
@@ -61,6 +78,15 @@ function setupEventListeners() {
   btnAnalyze.addEventListener('click', handlePageAnalysis);
   btnLookup.addEventListener('click', handleSelectionLookup);
   clearListBtn.addEventListener('click', handleClearList);
+
+  // Vision mode toggle
+  toggleVision.addEventListener('change', () => {
+    const enabled = toggleVision.checked;
+    chrome.runtime.sendMessage({ action: 'set_vision_mode', enabled }, () => {});
+    if (!enabled) {
+      visionStatus.textContent = '';
+    }
+  });
 
   // Search
   searchInput.addEventListener('input', () => {
@@ -118,7 +144,7 @@ function showState(state, customTitle = '') {
 
 // Handle complete page extraction and analysis
 function handlePageAnalysis() {
-  showState('loading', 'Scanning page for vocabulary...');
+  showState('loading', 'Auto-scrolling page to capture content...');
   stopCurrentAudio();
   
   chrome.runtime.sendMessage({ action: 'analyze_page' }, (response) => {
@@ -371,6 +397,45 @@ function playTTS(text, voiceType, buttonElement) {
       alert(`TTS synthesis failed: ${response ? response.error : 'Unknown API error'}`);
     }
   });
+}
+
+// Poll the content script for how many paragraphs have been captured
+function startCaptureStatusPolling() {
+  let lastCount = 0;
+
+  async function poll() {
+    try {
+      const tab = await getActiveTabFromSidePanel();
+      if (!tab) return;
+
+      chrome.tabs.sendMessage(tab.id, { action: 'get_accumulated_text' }, (response) => {
+        if (chrome.runtime.lastError || !response) return;
+        const count = response.paragraphCount || 0;
+        if (count !== lastCount) {
+          lastCount = count;
+          if (captureStatus) {
+            captureStatus.textContent = `📡 ${count} text block${count !== 1 ? 's' : ''} captured`;
+          }
+        }
+
+        // Also poll vision status
+        chrome.runtime.sendMessage({ action: 'get_vision_status' }, (vResponse) => {
+          if (chrome.runtime.lastError || !vResponse) return;
+          if (vResponse.enabled && vResponse.screenshotCount > 0) {
+            visionStatus.textContent = `📸 ${vResponse.screenshotCount} screenshot${vResponse.screenshotCount !== 1 ? 's' : ''}`;
+          }
+        });
+      });
+    } catch (e) { /* tab not ready */ }
+  }
+
+  setInterval(poll, 2000);
+  poll();
+}
+
+async function getActiveTabFromSidePanel() {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tabs[0] || null;
 }
 
 // Simple HTML escaping helper

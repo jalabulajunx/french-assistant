@@ -2,29 +2,43 @@ Context:
 1. Adult learner, Canadian, learning French at college level.
 2. Fluent in English and Tamil (native).
 3. Beginner French (Chapitre 1 level).
-4. Textbook: "Communication en direct" (McGraw Hill).
-5. Wants pronunciation guides in BOTH English and Tamil phonetics.
-6. Needs explicit explanation of French accent marks (diacritics) and how they change pronunciation.
+4. Wants pronunciation guides in BOTH English and Tamil phonetics.
+5. Needs explicit explanation of French accent marks (diacritics) and how they change pronunciation.
 
-You will be given a block of text extracted from a textbook page. This text contains a mix of French dialogue, vocabulary, and English instructions.
+You will be given structured text extracted from a textbook page. Each line is numbered as [1], [2], etc. representing a paragraph or text block. The text contains a mix of French dialogue, vocabulary, and English instructions.
 
 Your task:
-1. Identify all key French words, verbs, expressions, and phrases from the text that are valuable for a beginner French learner to study.
-2. For each identified French word/phrase, generate a detailed vocabulary entry in JSON format.
+1. Read the numbered paragraphs to understand the FULL CONTEXT of how French words and phrases are used on this page.
+2. Identify key French words, expressions, and COMPLETE PHRASES that are valuable for a beginner to study.
+3. For each entry, generate a detailed vocabulary entry in JSON format.
+
+IMPORTANT RULES:
+- ALWAYS preserve articles and contractions attached to the word. Write "l'alphabet" NOT "alphabet", "l'hiver" NOT "hiver", "l'école" NOT "école", "l'homme" NOT "homme". The article is part of how French is spoken and learned.
+- PREFER multi-word expressions and complete phrases over isolated single words. For example, extract "l'hiver en hiver" (winter in wintertime) rather than just "hiver".
+- If a word appears in a sentence or phrase, extract the PHRASE with enough context to be meaningful.
+- Use the paragraph numbers to understand which words belong together in the same sentence or context.
+- Still include important standalone vocabulary (nouns, verbs, adjectives) but always note the sentence context they appeared in.
+- For nouns, ALWAYS include the article (le, la, l', les, un, une) as part of the french_word. The article tells the learner the gender. Write "le bureau" not "bureau", "une femme" not "femme".
+- FRENCH NUMBERS: If the page contains numbers, numerals, or counting exercises, extract them as vocabulary. Include BOTH the numeral and the French word. For example:
+  - "1" or "un" → french_word: "un (1)", english_meaning: "one"
+  - "21" or "vingt et un" → french_word: "vingt et un (21)", english_meaning: "twenty-one"
+  - Include pronunciation for the number (e.g., "vingt" = "VAN" — the 'gt' is silent)
+  - Note silent letters and liaison rules in grammar_notes (e.g., "six" is "sees" alone but "seez" before a vowel)
+  - If the page is teaching numbers/counting, extract ALL numbers shown, not just a few.
 
 Format the output as a valid JSON array of objects. Do not include markdown formatting or backticks around the JSON. The response must be pure JSON.
 
 Each object in the array must have the following fields:
-- "french_word": The word or phrase in French (e.g., "bonjour", "s'il vous plaît").
+- "french_word": The word or phrase in French. Prefer meaningful phrases (e.g., "l'été en été", "comment allez-vous?") over single words when the phrase adds learning value.
 - "english_meaning": The English translation.
 - "english_pronunciation": Phonetic guide using English sounds. Use CAPS for stressed syllables. (e.g., "bohn-ZHOOR", "seel voo PLEH").
 - "tamil_pronunciation": Phonetic guide using Tamil script followed by a romanized phonetic guide in parentheses (e.g., "போன்ழூர் (pōṉzhūr)", "ஸீல் வூ ப்ளே (seel voo pleh)"). Make sure the Tamil transliteration is phonetically accurate to French pronunciation.
-- "accent_notes": Explain EVERY accent mark / diacritic in the word and how it affects pronunciation. Cover: é (acute — sounds like "ay"), è (grave — sounds like "eh"), ê (circumflex — sounds like "eh", longer), ë (diaeresis — pronounce the vowel separately), ç (cedilla — "s" sound, not "k"), ô (circumflex — "oh" sound), û, î, à, ù, etc. If the word has NO accents, set this to "No accent marks." Examples:
+- "accent_notes": Explain EVERY accent mark / diacritic in the word/phrase and how it affects pronunciation. Cover: é (acute — sounds like "ay"), è (grave — sounds like "eh"), ê (circumflex — sounds like "eh", longer), ë (diaeresis — pronounce the vowel separately), ç (cedilla — "s" sound, not "k"), ô (circumflex — "oh" sound), û, î, à, ù, etc. If the word has NO accents, set this to "No accent marks." Examples:
   - "français" → "ç (cedilla): makes the 'c' sound like 's' instead of 'k'. Without it, 'francais' would sound like 'frank-AY'."
   - "étudiant" → "é (acute accent): pronounced 'ay' as in 'say'. Signals a closed 'e' sound."
   - "être" → "ê (circumflex): pronounced like 'eh' but slightly longer/more open. Historically replaced an 's' (Latin 'essere')."
-  - "hôtel" → "ô (circumflex): pronounced as a pure 'oh' sound, lips rounded. Without it, the vowel would be more open."
-- "contextual_meaning": How it is used in the provided text.
+  - "l'été en été" → "é (acute accent) appears twice: both pronounced 'ay'. The phrase means 'summer in summertime'."
+- "contextual_meaning": How it is used in the provided text. Reference the paragraph context.
 - "grammar_notes": Part of speech, verb conjugation details if applicable, noun gender (masculine/feminine), plural form, or formality level.
 - "formality": "formal", "informal", or "neutral".
 - "example_sentence": A simple, clear example sentence in French using the word/phrase, along with its English translation in parentheses.
@@ -32,15 +46,15 @@ Each object in the array must have the following fields:
 Example Output structure:
 [
   {
-    "french_word": "français",
-    "english_meaning": "French (language or nationality)",
-    "english_pronunciation": "frahn-SEH",
-    "tamil_pronunciation": "ஃப்ரான்ஸே (frāṉsē)",
-    "accent_notes": "ç (cedilla): makes the 'c' sound like 's' instead of 'k'. Without the cedilla, 'francais' would be pronounced with a hard 'k' sound.",
-    "contextual_meaning": "Refers to the French language being studied.",
-    "grammar_notes": "Adjective/Noun. Masculine form. Feminine: 'française'. No article needed when used as a language name after 'en'.",
+    "french_word": "le printemps au printemps",
+    "english_meaning": "spring / in springtime",
+    "english_pronunciation": "luh pran-TAH oh pran-TAH",
+    "tamil_pronunciation": "ல ப்ரான்டா ஓ ப்ரான்டா (la prāṇṭā ō prāṇṭā)",
+    "accent_notes": "No accent marks.",
+    "contextual_meaning": "Used as a caption describing the spring season alongside an illustration of spring foliage.",
+    "grammar_notes": "Noun phrase. 'le printemps' is masculine. 'au' is the contraction of 'à + le'. The nasal 'em/an' in 'printemps' — the final 's' and 'p' are silent.",
     "formality": "neutral",
-    "example_sentence": "Je parle français. (I speak French.)"
+    "example_sentence": "Au printemps, les fleurs commencent à pousser. (In spring, the flowers start to grow.)"
   }
 ]
 

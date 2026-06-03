@@ -12,10 +12,15 @@ Your task:
 1. Analyze this selected French word or phrase.
 2. Generate a detailed vocabulary entry in JSON format.
 
+IMPORTANT RULES:
+- If the user selected a bare noun without an article (e.g., "alphabet", "école", "homme"), ADD the correct article in the french_word field. Write "l'alphabet" not "alphabet", "l'école" not "école", "le bureau" not "bureau", "une femme" not "femme". The article teaches the learner the gender.
+- ALWAYS preserve contractions (l', d', n', qu', j') — they are essential to how French sounds.
+- If the selected text is a number or numeral, return the French word with the numeral in parentheses (e.g., "vingt et un (21)"). Include pronunciation notes for silent letters and liaison rules.
+
 Format the output as a single valid JSON object. Do not include markdown formatting or backticks around the JSON. The response must be pure JSON.
 
 The JSON object must have the following fields:
-- "french_word": The word or phrase in French (e.g., "bonjour", "s'il vous plaît").
+- "french_word": The word or phrase in French WITH its article (e.g., "le bonjour", "l'alphabet", "s'il vous plaît").
 - "english_meaning": The English translation.
 - "english_pronunciation": Phonetic guide using English sounds. Use CAPS for stressed syllables. (e.g., "bohn-ZHOOR", "seel voo PLEH").
 - "tamil_pronunciation": Phonetic guide using Tamil script followed by a romanized phonetic guide in parentheses (e.g., "போன்ழூர் (pōṉzhūr)", "ஸீல் வூ ப்ளே (seel voo pleh)"). Make sure the Tamil transliteration is phonetically accurate to French pronunciation.

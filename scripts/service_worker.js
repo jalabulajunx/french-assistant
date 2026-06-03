@@ -1,7 +1,7 @@
 // Service Worker (Background Script) for French Assistant
 
 import { getAudio, saveAudio } from '../lib/audio_cache.js';
-import { analyzeText } from './gemini_client.js';
+import { analyzeText, analyzeTextChunked, analyzeWithVisionChunked } from './gemini_client.js';
 import { synthesizeSpeech } from './elevenlabs_client.js';
 
 // Open options page on installation
@@ -10,6 +10,30 @@ chrome.runtime.onInstalled.addListener((details) => {
     chrome.runtime.openOptionsPage();
   }
 });
+
+// ─── Vision Mode: screenshot accumulation ───
+let capturedScreenshots = [];    // base64 data URLs
+let visionModeEnabled = false;
+let captureTimer = null;
+const MAX_SCREENSHOTS = 20;      // cap to keep Gemini payload reasonable
+
+async function captureScreenshot() {
+  if (!visionModeEnabled) return;
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab(null, {
+      format: 'jpeg',
+      quality: 60  // lower quality = smaller payload, still readable
+    });
+    if (capturedScreenshots.length >= MAX_SCREENSHOTS) {
+      // Drop oldest to make room
+      capturedScreenshots.shift();
+    }
+    capturedScreenshots.push(dataUrl);
+    console.log(`Vision: captured screenshot ${capturedScreenshots.length}/${MAX_SCREENSHOTS}`);
+  } catch (e) {
+    console.warn('Vision: screenshot capture failed:', e.message);
+  }
+}
 
 // Helper to get active tab
 async function getActiveTab() {
@@ -54,6 +78,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     forwardToContentScript(message, sendResponse);
     return true;
   }
+
+  if (message.action === 'set_vision_mode') {
+    visionModeEnabled = message.enabled;
+    if (!visionModeEnabled) {
+      capturedScreenshots = [];
+    } else {
+      // Capture initial screenshot immediately
+      captureScreenshot();
+    }
+    console.log(`Vision mode: ${visionModeEnabled ? 'ON' : 'OFF'}`);
+    sendResponse({ success: true });
+    return true;
+  }
+
+  if (message.action === 'vision_scroll_tick') {
+    // Content script detected a scroll — capture a screenshot
+    if (visionModeEnabled) {
+      captureScreenshot().then(() => {
+        sendResponse({ success: true, count: capturedScreenshots.length });
+      });
+      return true;
+    }
+    sendResponse({ success: true, count: 0 });
+    return true;
+  }
+
+  if (message.action === 'get_vision_status') {
+    sendResponse({
+      enabled: visionModeEnabled,
+      screenshotCount: capturedScreenshots.length
+    });
+    return true;
+  }
+
+  if (message.action === 'auto_scroll_progress') {
+    // Forward progress to all extension views (sidepanel)
+    chrome.runtime.sendMessage(message).catch(() => {});
+    return false;
+  }
 });
 
 // Forward a message to the content script on the active tab
@@ -82,65 +145,83 @@ async function handlePageAnalysis(sendResponse) {
       throw new Error('No active tab found.');
     }
 
-    // Extract text from all frames using executeScript
-    const executionResults = await chrome.scripting.executeScript({
-      target: { tabId: tab.id, allFrames: true },
-      func: () => {
-        function extract(node) {
-          if (!node) return "";
-          const tagName = node.tagName ? node.tagName.toLowerCase() : "";
-          if (tagName === "iframe") return "";
-          if (["script", "style", "noscript", "head", "meta", "link", "svg", "canvas", "button", "input", "select", "textarea"].includes(tagName)) {
-            return "";
-          }
-          if (node.nodeType === 3) { // TEXT_NODE
-            const parent = node.parentElement;
-            if (parent && parent.getAttribute) {
-              const lang = parent.getAttribute("lang");
-              if (lang && lang.toLowerCase().startsWith("en")) {
-                return "";
-              }
-            }
-            return node.nodeValue.trim();
-          }
-          let parts = [];
-          for (let child of node.childNodes) {
-            const childText = extract(child);
-            if (childText) {
-              parts.push(childText);
-            }
-          }
-          const isBlock = ["p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr", "section", "article"].includes(tagName);
-          return parts.join(isBlock ? "\n" : " ");
+    await ensureContentScriptActive(tab.id);
+
+    // Clear previous vision screenshots for a fresh capture
+    if (visionModeEnabled) {
+      capturedScreenshots = [];
+    }
+
+    // Auto-scroll the page to capture all content
+    console.log('Starting auto-scroll...');
+    const scrollResult = await new Promise((resolve, reject) => {
+      chrome.tabs.sendMessage(tab.id, { action: 'auto_scroll' }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
         }
-        return document.body ? extract(document.body) : "";
-      }
+        resolve(response);
+      });
     });
 
-    if (!executionResults || executionResults.length === 0) {
-      throw new Error('No text content could be extracted from this page. Make sure you are on a valid webpage.');
+    if (!scrollResult || !scrollResult.success) {
+      throw new Error(scrollResult?.error || 'Auto-scroll failed.');
     }
 
-    // Combine text from all frames
-    const allText = executionResults
-      .map(r => r.result)
-      .filter(text => text && text.trim().length > 0)
-      .join("\n\n");
-
-    if (!allText || !allText.trim()) {
-      throw new Error('No text content could be extracted from this page. Make sure you are on a valid webpage.');
-    }
+    console.log(`Auto-scroll complete: ${scrollResult.steps} steps, ${scrollResult.paragraphs} paragraphs`);
 
     // Get API key and model from storage
     const settings = await chrome.storage.sync.get(['geminiApiKey', 'geminiModel']);
     const apiKey = settings.geminiApiKey;
     const modelName = settings.geminiModel || 'gemini-2.5-flash-lite';
-    
+
     if (!apiKey) {
       throw new Error('Gemini API Key is missing. Open extension options to set it.');
     }
 
-    const data = await analyzeText(allText, 'page_analysis', apiKey, modelName);
+    // Broadcast progress updates to sidepanel
+    function broadcastProgress(message) {
+      chrome.runtime.sendMessage(message).catch(() => {});
+    }
+
+    let data;
+    if (visionModeEnabled && capturedScreenshots.length > 0) {
+      // ─── Vision mode: screenshots only, no DOM text ───
+      // The screenshots already contain all visible text. Sending extracted
+      // paragraphs on top would be redundant and bloat the payload.
+      console.log(`Vision analysis: ${capturedScreenshots.length} screenshots captured`);
+      data = await analyzeWithVisionChunked(capturedScreenshots, apiKey, modelName, (chunkIdx, totalChunks) => {
+        broadcastProgress({
+          action: 'analysis_progress',
+          stage: 'analyzing',
+          detail: `Analyzing screenshot batch ${chunkIdx + 1} of ${totalChunks}...`
+        });
+      });
+    } else {
+      // ─── Text mode: DOM-extracted paragraphs, chunked ───
+      const allText = await new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(tab.id, { action: 'get_accumulated_text' }, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          if (response && response.text && response.text.trim()) {
+            console.log(`Analyzing ${response.paragraphCount} accumulated paragraphs`);
+            resolve(response.text);
+          } else {
+            reject(new Error('No text content found on this page.'));
+          }
+        });
+      });
+
+      data = await analyzeTextChunked(allText, apiKey, modelName, (chunkIdx, totalChunks) => {
+        broadcastProgress({
+          action: 'analysis_progress',
+          stage: 'analyzing',
+          detail: `Analyzing text batch ${chunkIdx + 1} of ${totalChunks}...`
+        });
+      });
+    }
     sendResponse({ success: true, data });
   } catch (error) {
     console.error('Analysis error:', error);
