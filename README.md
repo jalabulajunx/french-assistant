@@ -24,9 +24,10 @@ Click any word to expand its full breakdown — pronunciation guides in both Eng
 
 -   **Auto-Scroll Page Capture**: Clicking **Analyze Page** automatically scrolls the entire page (or iframe) top-to-bottom, harvesting all text as it goes — no manual scrolling needed. Handles virtualized/lazy-loaded content that only exists in the DOM while visible.
 -   **Deep Content Scanning**: Extracts French text recursively from nested same-origin `srcdoc` iframes while intelligently skipping English headings and instructions (`lang="en"`).
+-   **Native PDF Support**: Automatically detects PDFs — whether opened directly in Chrome or embedded in a page via `<embed>`, `<object>`, or `<iframe>`. The PDF is fetched and sent directly to Gemini as a native PDF document (no screenshots needed). Large PDFs are analyzed in 10-page batches with running summaries.
 -   **Vision Mode**: Toggle on to capture screenshots during auto-scroll instead of relying on DOM text extraction. Gemini Vision reads French text directly from the images — essential for pages where text is embedded in diagrams, illustrations, or infographics.
--   **Chunked Analysis with Running Context**: Large pages are automatically split into manageable batches. Each batch is analyzed by Gemini, which also generates a cumulative running summary. That summary is fed into the next batch so Gemini maintains full thematic context across the entire page — no vocabulary is analyzed in isolation.
--   **Gemini-Powered Vocabulary Extraction**: Uses `gemini-2.5-flash-lite` (text mode) or `gemini-2.5-flash` (vision mode) to extract key French words, verb forms, and expressions, providing contextual meanings, formality levels, and grammatical details.
+-   **Chunked Analysis with Running Context**: Large pages and PDFs are automatically split into manageable batches. Each batch is analyzed by Gemini, which also generates a cumulative running summary. That summary is fed into the next batch so Gemini maintains full thematic context across the entire document — no vocabulary is analyzed in isolation.
+-   **Gemini-Powered Vocabulary Extraction**: Uses `gemini-2.5-flash-lite` (text mode) or `gemini-2.5-flash` (vision/PDF mode) to extract key French words, verb forms, and expressions, providing contextual meanings, formality levels, and grammatical details.
 -   **French Number Handling**: Chapters teaching numbers/counting are detected and numerals are extracted with both the French word and numeral form (e.g., "vingt et un (21)"), including silent letter and liaison rules.
 -   **Dual-Phonetics Pronunciation Guides**:
     -   **English Phonetics**: High-quality English transliterations (e.g., `bonjour` ➔ `"bohn-ZHOOR"`).
@@ -109,13 +110,19 @@ You will need your own API keys. Configure them on the settings page:
 7.  Click on any word card to expand its detail drawer.
 8.  Click **French Voice** to hear native French audio, or **Play** next to the example sentence to hear it in context.
 
-### 👁️ Method 2: Vision Mode (for text in images)
+### 📄 Method 2: Analyzing a PDF
+1.  Open a French PDF directly in Chrome (navigate to the `.pdf` URL), or open a page that has a PDF embedded.
+2.  Click **Analyze Page** — the extension automatically detects the PDF, downloads it, and sends it directly to Gemini.
+3.  For large PDFs, analysis happens in 10-page batches with progress updates (e.g., "Analyzing PDF batch 2 of 4...").
+4.  No auto-scrolling or screenshots are needed — Gemini reads the PDF natively.
+
+### 👁️ Method 3: Vision Mode (for text in images)
 1.  Toggle on **Vision Mode** in the side panel before clicking Analyze Page.
 2.  Click **Analyze Page** — the extension auto-scrolls as before, but now captures **screenshots** at each scroll position instead of extracting DOM text.
 3.  The screenshots are sent in batches to Gemini Vision, which reads French text directly from the images — including labels on diagrams, text in illustrations, and content inside image-based layouts.
 4.  Use this when the page renders text as images, or when DOM extraction misses content.
 
-### 👆 Method 3: Highlighting Text (Quick Lookup)
+### 👆 Method 4: Highlighting Text (Quick Lookup)
 1.  While reading the textbook page, highlight (select) any French word or phrase with your cursor.
 2.  Click **Lookup Selected** in the side panel.
 3.  The term will be analyzed by Gemini, added to the top of your list, and the detail view will automatically slide in!
@@ -139,13 +146,16 @@ Large pages (60+ text blocks) are split into overlapping chunks of ~60 paragraph
 
 The running summary from chunk N is fed as context into chunk N+1. This way, chunk 5 receives a summary that encapsulates chunks 1–4, maintaining full thematic continuity without resending raw text. Results are merged and deduplicated by `french_word` at the end.
 
-### 4. Vision Mode
+### 4. PDF Support
+The service worker detects PDFs in three ways: (1) the tab URL ends in `.pdf`, (2) an `<embed type="application/pdf">` element on the page, or (3) an `<iframe>` or `<object>` pointing to a `.pdf` URL. When detected, the PDF is fetched directly via the service worker (which has `<all_urls>` host permission, bypassing CORS), converted to base64, and sent to Gemini as `inline_data` with `mime_type: "application/pdf"`. Large PDFs are analyzed in batches of 10 pages, with Gemini instructed to focus on a specific page range per batch while the running summary carries cumulative context forward.
+
+### 5. Vision Mode
 When toggled on, the service worker captures JPEG screenshots via `chrome.tabs.captureVisibleTab` at each auto-scroll step. Screenshots are sent to Gemini Vision in batches of 4, using the same running-summary chain for context continuity. **No DOM text is sent in Vision mode** — Gemini reads everything from the images. The model is automatically upgraded from `flash-lite` to `flash` for better image understanding.
 
-### 5. Service Worker Module System
+### 6. Service Worker Module System
 The extension runs background tasks using a Manifest V3 Service Worker. In `manifest.json`, the background service worker is declared with `"type": "module"`, allowing direct `import` statements of the API clients and caching systems.
 
-### 6. Audio Caching
+### 7. Audio Caching
 Audio assets are stored in an IndexedDB database named `FrenchAssistantAudioCache` in the `audio_blobs` store. The keys are structured as `lowercase_french_word_voiceId`. When audio is played:
 1.  The service worker queries the local cache.
 2.  If found, the cached Blob is fetched and converted to an `ArrayBuffer` (serialized as `Uint8Array` for Chrome message passing) to be sent to the side panel.

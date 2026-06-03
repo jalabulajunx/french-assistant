@@ -207,6 +207,177 @@ function extractVocabulary(result) {
 }
 
 /**
+ * Analyze a PDF document in chunked page batches with running summaries.
+ * The PDF is sent as inline_data with mime_type "application/pdf".
+ * Gemini reads the PDF natively — no screenshots or text extraction needed.
+ *
+ * For large PDFs, we can't split the binary ourselves without a PDF library,
+ * so we send the entire PDF each time but instruct Gemini to focus on a
+ * specific page range per batch. The running summary carries context forward.
+ *
+ * @param {ArrayBuffer} pdfBuffer - Raw PDF bytes.
+ * @param {number} totalPages - Total number of pages (estimated or from header).
+ * @param {string} apiKey - The Gemini API Key.
+ * @param {string} modelName - The Gemini model to use.
+ * @param {function} onProgress - Called with (chunkIndex, totalChunks).
+ * @returns {Promise<any[]>} Merged array of vocabulary entries.
+ */
+export async function analyzePdfChunked(pdfBuffer, totalPages, apiKey, modelName = 'gemini-2.5-flash-lite', onProgress = null) {
+  if (!apiKey) {
+    throw new Error('Gemini API key is not configured. Please add it in the settings.');
+  }
+
+  // Use flash for PDF (better document understanding than flash-lite)
+  const pdfModel = modelName.includes('lite') ? modelName.replace('-lite', '') : modelName;
+
+  // Load the base prompt template
+  const responseText = await fetch(chrome.runtime.getURL('prompts/page_analysis.txt'));
+  if (!responseText.ok) {
+    throw new Error('Failed to load prompt template: prompts/page_analysis.txt');
+  }
+  const baseTemplate = await responseText.text();
+
+  // Convert PDF buffer to base64
+  const pdfBase64 = arrayBufferToBase64(pdfBuffer);
+
+  // Determine page batches
+  const PAGES_PER_BATCH = 10;
+
+  // If small PDF, send it all at once
+  if (totalPages <= PAGES_PER_BATCH) {
+    const result = await callPdfBatch(pdfBase64, 1, totalPages, '', 0, 1, baseTemplate, pdfModel, apiKey);
+    return extractVocabulary(result);
+  }
+
+  // Split into page-range batches
+  const batches = [];
+  for (let start = 1; start <= totalPages; start += PAGES_PER_BATCH) {
+    const end = Math.min(start + PAGES_PER_BATCH - 1, totalPages);
+    batches.push({ start, end });
+  }
+
+  console.log(`PDF chunked analysis: ${batches.length} batches, ${totalPages} pages total`);
+  const allResults = [];
+  let runningSummary = '';
+
+  for (let i = 0; i < batches.length; i++) {
+    if (onProgress) onProgress(i, batches.length);
+    const { start, end } = batches[i];
+    console.log(`Analyzing PDF pages ${start}–${end} (batch ${i + 1}/${batches.length})...`);
+
+    try {
+      const result = await callPdfBatch(
+        pdfBase64, start, end, runningSummary, i, batches.length, baseTemplate, pdfModel, apiKey
+      );
+
+      let entries = [];
+      let newSummary = '';
+
+      if (result && typeof result === 'object' && !Array.isArray(result)) {
+        entries = Array.isArray(result.vocabulary) ? result.vocabulary : [];
+        newSummary = result.running_summary || '';
+      } else if (Array.isArray(result)) {
+        entries = result;
+        const words = entries.map(e => e.french_word).join(', ');
+        newSummary = runningSummary
+          ? `${runningSummary}\nPages ${start}–${end} added: ${words}`
+          : `Pages ${start}–${end} words: ${words}`;
+      }
+
+      allResults.push(...entries);
+      if (newSummary) runningSummary = newSummary;
+
+    } catch (e) {
+      console.warn(`PDF batch ${i + 1}/${batches.length} (pages ${start}–${end}) failed:`, e.message);
+    }
+  }
+
+  if (allResults.length === 0) {
+    throw new Error('All PDF analysis batches failed. Please try again.');
+  }
+
+  // Deduplicate
+  const seen = new Map();
+  for (const entry of allResults) {
+    if (entry && entry.french_word) {
+      seen.set(entry.french_word.toLowerCase(), entry);
+    }
+  }
+  return Array.from(seen.values());
+}
+
+/**
+ * Call Gemini for a specific page range of a PDF document.
+ * The full PDF is sent as inline_data, but the prompt instructs Gemini
+ * to focus only on the specified pages.
+ */
+async function callPdfBatch(pdfBase64, pageStart, pageEnd, runningSummary, batchIdx, totalBatches, baseTemplate, pdfModel, apiKey) {
+  let contextBlock = '';
+  if (batchIdx > 0 && runningSummary) {
+    contextBlock =
+      `CUMULATIVE CONTEXT FROM PREVIOUS PAGE BATCHES (pages before ${pageStart}):\n` +
+      `"""\n${runningSummary}\n"""\n\n` +
+      `You are now analyzing pages ${pageStart}–${pageEnd} (batch ${batchIdx + 1} of ${totalBatches}). ` +
+      `Use the context above to understand ongoing themes, but only extract NEW vocabulary ` +
+      `not already listed in the summary above.\n\n`;
+  }
+
+  const pdfIntro = `You are analyzing a French textbook PDF document. ` +
+    `FOCUS ONLY on pages ${pageStart} through ${pageEnd}. ` +
+    `Ignore content on pages outside this range — it will be analyzed in other batches. ` +
+    `Read ALL French text on these pages including text in images, diagrams, tables, and exercises.\n\n`;
+
+  const prompt = pdfIntro + baseTemplate.replace('{{TEXT}}', contextBlock + `[Content is in the attached PDF — read pages ${pageStart}–${pageEnd}.]`);
+
+  // If multi-batch, ask for wrapped format with running_summary
+  let formatWrapper = '';
+  if (totalBatches > 1) {
+    formatWrapper =
+      `\n\nIMPORTANT — OUTPUT FORMAT:\n` +
+      `Return a JSON object (NOT a plain array) with exactly two keys:\n` +
+      `1. "vocabulary": the array of vocabulary entry objects as described above.\n` +
+      `2. "running_summary": a concise summary (150–250 words) of ALL content analyzed so far ` +
+      `(including the cumulative context above AND pages ${pageStart}–${pageEnd}). ` +
+      `Include: the chapter/topic, key themes, and a bullet list of all french_word values extracted so far. ` +
+      `This summary will be passed to the next batch as context, so make it comprehensive.\n`;
+  }
+
+  const parts = [
+    { text: prompt + formatWrapper },
+    {
+      inline_data: {
+        mime_type: 'application/pdf',
+        data: pdfBase64
+      }
+    }
+  ];
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${pdfModel}:generateContent?key=${apiKey}`;
+  const requestBody = {
+    contents: [{ parts }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.2,
+      maxOutputTokens: 65536
+    }
+  };
+
+  return await callGemini(url, requestBody);
+}
+
+/** Convert ArrayBuffer to base64 string */
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return btoa(binary);
+}
+
+/**
  * Split numbered paragraphs into overlapping chunks.
  * Overlap ensures paragraphs near boundaries appear in both adjacent chunks,
  * preserving local context at split points.

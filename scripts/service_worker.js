@@ -1,7 +1,7 @@
 // Service Worker (Background Script) for French Assistant
 
 import { getAudio, saveAudio } from '../lib/audio_cache.js';
-import { analyzeText, analyzeTextChunked, analyzeWithVisionChunked } from './gemini_client.js';
+import { analyzeText, analyzeTextChunked, analyzeWithVisionChunked, analyzePdfChunked } from './gemini_client.js';
 import { synthesizeSpeech } from './elevenlabs_client.js';
 
 // Open options page on installation
@@ -137,6 +137,54 @@ async function forwardToContentScript(message, sendResponse) {
   }
 }
 
+// Detect if a URL points to a PDF
+function isPdfUrl(url) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname.toLowerCase().endsWith('.pdf');
+  } catch {
+    return false;
+  }
+}
+
+// Detect if the active tab is showing a PDF (Chrome's built-in viewer or embedded)
+async function detectPdfInTab(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: () => {
+        // Check for Chrome's PDF viewer embed
+        const embed = document.querySelector('embed[type="application/pdf"]');
+        if (embed) return embed.src || window.location.href;
+        // Check for object embeds
+        const obj = document.querySelector('object[type="application/pdf"]');
+        if (obj) return obj.data;
+        // Check for iframe pointing to a PDF
+        const iframes = document.querySelectorAll('iframe');
+        for (const iframe of iframes) {
+          if (iframe.src && iframe.src.toLowerCase().endsWith('.pdf')) return iframe.src;
+        }
+        return null;
+      }
+    });
+    for (const r of results) {
+      if (r.result) return r.result;
+    }
+  } catch (e) {
+    console.warn('PDF detection in tab failed:', e.message);
+  }
+  return null;
+}
+
+// Estimate PDF page count from file size (rough heuristic: ~5KB per page for text-heavy,
+// ~50KB per page for image-heavy). We use a middle estimate of ~20KB/page.
+// This is just for chunking — not critical to be exact.
+function estimatePageCount(byteSize) {
+  const estimate = Math.max(1, Math.round(byteSize / 20000));
+  return estimate;
+}
+
 // Handle full page text extraction and Gemini analysis
 async function handlePageAnalysis(sendResponse) {
   try {
@@ -145,6 +193,63 @@ async function handlePageAnalysis(sendResponse) {
       throw new Error('No active tab found.');
     }
 
+    // Broadcast progress updates to sidepanel
+    function broadcastProgress(message) {
+      chrome.runtime.sendMessage(message).catch(() => {});
+    }
+
+    // Get API key and model from storage
+    const settings = await chrome.storage.sync.get(['geminiApiKey', 'geminiModel']);
+    const apiKey = settings.geminiApiKey;
+    const modelName = settings.geminiModel || 'gemini-2.5-flash-lite';
+
+    if (!apiKey) {
+      throw new Error('Gemini API Key is missing. Open extension options to set it.');
+    }
+
+    // ─── Check if this is a PDF ───
+    let pdfUrl = isPdfUrl(tab.url) ? tab.url : null;
+    if (!pdfUrl) {
+      // Check for embedded PDFs in the page
+      pdfUrl = await detectPdfInTab(tab.id);
+    }
+
+    if (pdfUrl) {
+      // ─── PDF mode: fetch PDF bytes and send directly to Gemini ───
+      console.log(`PDF detected: ${pdfUrl}`);
+      broadcastProgress({
+        action: 'analysis_progress',
+        stage: 'analyzing',
+        detail: 'Downloading PDF...'
+      });
+
+      const pdfResponse = await fetch(pdfUrl);
+      if (!pdfResponse.ok) {
+        throw new Error(`Failed to download PDF: ${pdfResponse.status} ${pdfResponse.statusText}`);
+      }
+      const pdfBuffer = await pdfResponse.arrayBuffer();
+      const totalPages = estimatePageCount(pdfBuffer.byteLength);
+      console.log(`PDF downloaded: ${(pdfBuffer.byteLength / 1024).toFixed(0)}KB, ~${totalPages} pages estimated`);
+
+      broadcastProgress({
+        action: 'analysis_progress',
+        stage: 'analyzing',
+        detail: `Analyzing PDF (~${totalPages} pages)...`
+      });
+
+      const data = await analyzePdfChunked(pdfBuffer, totalPages, apiKey, modelName, (chunkIdx, totalChunks) => {
+        broadcastProgress({
+          action: 'analysis_progress',
+          stage: 'analyzing',
+          detail: `Analyzing PDF batch ${chunkIdx + 1} of ${totalChunks}...`
+        });
+      });
+
+      sendResponse({ success: true, data });
+      return;
+    }
+
+    // ─── Not a PDF — proceed with normal page analysis ───
     await ensureContentScriptActive(tab.id);
 
     // Clear previous vision screenshots for a fresh capture
@@ -170,25 +275,9 @@ async function handlePageAnalysis(sendResponse) {
 
     console.log(`Auto-scroll complete: ${scrollResult.steps} steps, ${scrollResult.paragraphs} paragraphs`);
 
-    // Get API key and model from storage
-    const settings = await chrome.storage.sync.get(['geminiApiKey', 'geminiModel']);
-    const apiKey = settings.geminiApiKey;
-    const modelName = settings.geminiModel || 'gemini-2.5-flash-lite';
-
-    if (!apiKey) {
-      throw new Error('Gemini API Key is missing. Open extension options to set it.');
-    }
-
-    // Broadcast progress updates to sidepanel
-    function broadcastProgress(message) {
-      chrome.runtime.sendMessage(message).catch(() => {});
-    }
-
     let data;
     if (visionModeEnabled && capturedScreenshots.length > 0) {
       // ─── Vision mode: screenshots only, no DOM text ───
-      // The screenshots already contain all visible text. Sending extracted
-      // paragraphs on top would be redundant and bloat the payload.
       console.log(`Vision analysis: ${capturedScreenshots.length} screenshots captured`);
       data = await analyzeWithVisionChunked(capturedScreenshots, apiKey, modelName, (chunkIdx, totalChunks) => {
         broadcastProgress({

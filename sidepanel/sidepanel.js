@@ -144,7 +144,7 @@ function showState(state, customTitle = '') {
 
 // Handle complete page extraction and analysis
 function handlePageAnalysis() {
-  showState('loading', 'Auto-scrolling page to capture content...');
+  showState('loading', 'Analyzing page...');
   stopCurrentAudio();
   
   chrome.runtime.sendMessage({ action: 'analyze_page' }, (response) => {
